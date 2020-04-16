@@ -1,0 +1,93 @@
+w6 quiz
+========================================================
+
+# q1
+
+Which of the following (pick one) is not a step in building a prediction model?
+
+A: Selecting features with the test set.
+
+# q2
+
+If K is small in a K-fold cross validation is the bias in the estimate of out-of-sample (test set) accuracy smaller or bigger? If K is small is the variance in the estimate of out-of-sample (test set) accuracy smaller or bigger. Is K large or small in leave one out cross validation?
+
+A: The bias is larger and the variance is smaller. Under leave one out cross validation K is equal to the sample size.
+
+# q3
+
+Load the South Africa Heart Disease Data and create training and test sets with the following code:
+```{r}
+library(ElemStatLearn)
+data(SAheart)
+summary(SAheart)
+set.seed(8484)
+train = sample(1:dim(SAheart)[1],size=dim(SAheart)[1]/2,replace=F)
+trainSA = SAheart[train,]
+testSA = SAheart[-train,]
+```
+
+Then fit a logistic regression model with Coronary Heart Disease (chd) as the outcome and age at onset, current alcohol consumption, obesity levels, cumulative tabacco, type-A behavior, and low density lipoprotein cholesterol as predictors.
+
+```{r}
+glm1 <- glm(chd ~  age + alcohol + obesity + tobacco + typea + ldl, family="binomial", data=trainSA)
+```
+
+Calculate the misclassification rate for your model using this function and a prediction on the "response" scale:
+
+```{r}
+missClass = function(values,prediction){sum(((prediction > 0.5)*1) != values)/length(values)}
+
+predict0 <- predict(glm1, type="response")
+predict1 <- predict(glm1, type="response", newdata=testSA)
+
+missClass(trainSA$chd,predict0)
+missClass(testSA$chd,predict1)
+```
+
+What is the misclassification rate on the training set? What is the misclassification rate on the test set?
+
+A: Training set misclassification: 0.2727 
+Test set misclassification: 0.3117
+
+# q4
+
+Load the olive oil data using the commands:
+```{r}
+library(pgmm)
+data(olive)
+# remove the 1st col
+olive = olive[,-1]
+names(olive)
+```
+
+These data contain information on 572 different Italian olive oils from multiple regions in Italy. Fit a classification tree where Area is the outcome variable. 
+
+```{r}
+tree1 <- tree(Area ~ ., data=olive)
+plot(tree1)
+text(tree1)
+```
+
+Then predict the value of area for the following data frame using the tree command with all defaults
+
+```{r}
+newdata = as.data.frame(t(colMeans(olive)))
+prediction <- predict(tree1, newdata)
+prediction
+```
+
+Q: What is the resulting prediction? Is the resulting prediction strange? Why or why not?
+
+A: 2.875. It is strange because Region should be a qualitative variable - but tree is reporting the average value of Region as a numeric variable in the leaf predicted for newdata.
+
+# q5
+
+Suppose that I fit and prune a tree to get the following diagram. (img in quiz)
+
+What area would I predict for a new value of:
+
+```{r}
+newData = data.frame(Palmitic = 1200, Palmitoleic = 120, Stearic=200,Oleic=7000,Linoleic = 900, Linolenic = 32, Arachidic=60,Eicosenoic=6)
+```
+
+A: 8

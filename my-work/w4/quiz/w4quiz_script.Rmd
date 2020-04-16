@@ -1,0 +1,209 @@
+w4 quiz
+========================================================
+
+Start downloading stuff
+
+```{r}
+movies_url <- "https://spark-public.s3.amazonaws.com/dataanalysis/movies.txt"
+download.file(movies_url, destfile="../data/movies.txt", method="curl")
+movies_data = read.csv("../data/movies.txt", sep="\t")
+
+summary(movies_data)
+```
+
+Build some exploratory variable
+
+```{r}
+
+meanRatings <- tapply(movies_data$score, movies_data$rating, mean)
+
+```
+
+Now do some plots
+
+```{r fig.width=7, fig.height=6}
+plot(movies_data$score ~ jitter(as.numeric(movies_data$rating)), pch=20, xaxt="n")
+axis(side=1, at=unique(as.numeric(movies_data$rating)), labels=unique(movies_data$rating))
+points(1:4,meanRatings,col="red",pch="-",cex=5)
+```
+
+And start with fitting-galore
+
+```{r}
+lm1 <- lm(movies_data$score ~ as.factor(movies_data$rating))
+summary(lm1)
+
+# plot the estimate on top of the previous graph, if the model is correct, they should overwrite the previous means
+points(1:4, lm1$coeff[1] + c(0,lm1$coeff[2:4]),col="blue",pch="-", cex=4)
+confint(lm1)
+```
+
+The value that must be observed in this case is that all the ratings (pg, pg-13, r) have confidence intervals between around -27 and 3, since they're covering 0 means that there's almost no difference with the reference model (g)
+
+Now check the residuals and fitted values
+
+```{r}
+plot(lm1$residuals ~ jitter(as.numeric(movies_data$rating)), pch=20, xaxt="n")
+plot(lm1$fitted.values ~ as.factor(movies_data$rating), pch=20)
+```
+
+Now create a model where the intercept is R rather than G as it was for the previous model, we just need to reorder the factros putting R as the first level
+
+```{r}
+lm2 <- lm(movies_data$score ~ relevel(movies_data$rating, ref="R"))
+summary(lm2)
+confint(lm2)
+```
+
+Again, all the coefficients have confidence intervals that cover 0, so it won't be much difference between the scores of other ratings, particularly for pg-4 where the quantiles cover the interval between -5 and +5
+
+Now we can have a look at all the variables together instead of reordering factors according to a specific level, we do so by using the analysis of variance:
+
+```{r}
+anova(lm1)
+
+# alternatively
+lm3 <- aov(movies_data$score ~ as.factor(movies_data$rating))
+summary(lm3)
+TukeyHSD(lm3)
+```
+
+# now the quiz
+
+## q1
+
+Fit a linear regression model by least squares where the Rotten Tomatoes score is the outcome and the box office gross is the only covariate. What is the regression coefficient for the slope and it's interpretation?
+
+```{r}
+summary(movies_data)
+
+plot(movies_data$box.office ~ movies_data$score)
+lmq1 <- lm(movies_data$score ~ movies_data$box.office)
+abline(lmq1)
+lmq1$coefficients
+```
+
+The regression coefficient is 0.09676. The interpretation is that an increase of one million dollars in box office gross is associated with a 0.09676 increase in Rotten Tomatoes Score.
+
+## q2
+
+Fit a linear regression model by least squares where the Rotten Tomatoes score is the outcome and the box office gross is the only covariate. What is the 90% confidence interval for the intercept term and what can you deduce from the 90% confidence interval?
+
+```{r}
+confint(lmq1, level=0.9)
+```
+
+The 90% confidence interval for the intercept is (47.52, 52.63). If we repeated this study 100 times, we would expect our calculated interval to cover the true value on average 90% of the time.
+
+## q3
+
+Fit a linear regression model by least squares where the Rotten Tomatoes score is the outcome and box office gross and running time are the covariates. 
+
+What is the value for the regression coefficient for running time? How is it interpreted?
+
+```{r}
+summary(movies_data)
+lmq3 <- lm(movies_data$score ~ movies_data$box.office + movies_data$running.time)
+abline(lmq3, col="red")
+summary(lmq3)
+```
+
+*WRONG* The coefficient is 0.12752. That means that an increase of one minute in running time is associated with an average increase of 0.12752 in score.
+
+2nd attempt: The coefficient is 0.12752. That means that if two movies have the same box office gross, an increase of one minute in running time is associated with an average increase of 0.12752 in score.
+
+## q4
+
+Fit a linear regression model by least squares where the Rotten Tomatoes score is the outcome and box office gross and running time are the covariates. (same as q3)
+
+Is running time a confounder for the relationship between Rotten Tomatoes score and box office gross? Why or why not?
+
+```{r}
+library(Hmisc)
+plot(movies_data$box.office ~ movies_data$score,  pch=20, col=cut2(movies_data$running.time, g=4))
+anova(lmq1)
+anova(lmq3)
+abline(lmq1, col="blue")
+abline(lmq3, col="red")
+```
+
+*WRONG* No running time is not a confounder. Including it in the regression model does not significantly change the relationship between box office gross and Rotten Tomatoes score.
+
+2nd attempt: Yes running time is a confounder. It is correlated both with the Rotten Tomatoes score and the box office gross.
+
+## q5
+
+Fit a linear regression model by least squares where the Rotten Tomatoes score is the outcome and box office gross and running time are the covariates. (same as q3)
+
+Make a plot of the movie running times versus movie score. Do you see any outliers? If you do, remove those data points and refit the same regression (Rotten Tomatoes score is the outcome and box office gross and running time are the covariates).
+
+```{r}
+plot(movies_data$score, movies_data$running.time)
+movies_shorter <- movies_data[movies_data$running.time < 180,]
+lmq5 <- lm(movies_shorter$score ~ movies_shorter$box.office + movies_shorter$running.time)
+lmq3$coefficients
+lmq5$coefficients
+```
+
+What do you observe?
+
+Yes there are two outliers. After removing them and refitting the regression line, the running time coefficient has a larger magnitude and is more statistically significant.
+
+## q6
+
+Fit a linear regression model by least squares where the Rotten Tomatoes score is the outcome and running time and box office gross are covariates. (same as q3)
+
+What is the P-value for running time and how is it interpreted?
+
+```{r}
+summary(lmq3)
+```
+
+The P-value is 0.0187. It is the probability of observing a t-statistic as big as, or larger than, the one we saw, if there was no relationship between Rotten Tomatoes score and running time for a fixed box office gross.
+
+## q7
+
+Fit a linear model by least squares where Rotten Tomatoes score is the outcome and the covariates are movie rating, running time, and an interaction between running time and rating are the covariates. 
+
+```{r}
+summary(movies_data)
+lmq7 <- lm(movies_data$score ~ movies_data$rating + movies_data$running.time + movies_data$running.time*movies_data$rating)
+summary(lmq7)
+```
+
+What is the coefficient for the interaction between running time and the indicator/dummy variable for PG rating?
+
+The coefficient is -0.6901.
+
+## q8
+
+Fit a linear model by least squares where Rotten Tomatoes score is the outcome and the covariates are movie rating, running time, and an interaction between running time and rating are the covariates. (same as q7)
+
+What is the estimated average change in score for a PG movie for a one minute increase in running time?
+
+```{r}
+summary(lmq7)
+lmq7$coeff[5] + lmq7$coeff[6]
+```
+
+0.4951
+
+## q9
+
+```{r}
+data(warpbreaks)
+summary(warpbreaks)
+```
+
+Fit a linear model where the outcome is the number of breaks and the covariate is tension. What is a 95% confidence interval for the average difference in number of breaks between medium and high tension?
+
+```{r}
+lmq9 <- lm(warpbreaks$breaks ~ relevel(warpbreaks$tension, ref="H"))
+confint(lmq9)
+```
+
+A: (-3.23, 12.67)
+
+## q10
+
+There is a statistically significant association. We may be skeptical this association could be used to reduce autism rates, since there are many possible explanations for the association that do not involve a direct relationship between organic foods and autism.

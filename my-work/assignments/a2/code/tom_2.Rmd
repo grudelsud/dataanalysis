@@ -1,0 +1,28 @@
+export
+========================================================
+
+
+performing a k-fold cross validation on the tree [fig. 1b] we see a significant reduction of misclassifications for a depth larger than 6, this can help creating a simplified version of the tree in order to achieve comparable error with less variables.
+
+
+```{r}
+plot(cv.tree(mod_tree, FUN=prune.tree, method="misclass"))
+mod_prunetree <- prune.tree(mod_tree,best=6)
+
+```
+
+we can then validate our pruned tree against the test set
+
+```{r}
+pred_prunetree <- predict(mod_prunetree, test_set, type="class")
+err_prunetree <- sum(pred_prunetree != test_set$activity) / length(test_set$activity)
+print(err_prunetree)
+```
+
+an error in classification of 13% is slightly higher, but the reduction of the number of variables is much greater, allowing to select the significant variables for a correct classifcation
+
+
+```{r}
+plot(mod_prunetree)
+text(mod_prunetree)
+```

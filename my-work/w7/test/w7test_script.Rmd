@@ -1,0 +1,90 @@
+w7 test
+========================================================
+
+```{r}
+download.file("https://spark-public.s3.amazonaws.com/dataanalysis/cd4.data", destfile="../data/cd4.data",method="curl")
+
+cd4Data <- read.table("../data/cd4.data", col.names=c("time", "cd4", "age", "packs", "drugs", "sex","cesd", "id")) 
+cd4Data <- cd4Data[order(cd4Data$time),]
+head(cd4Data)
+```
+
+create a moving average linear filter
+
+```{r}
+filtTime <- as.vector(filter(cd4Data$time,filter=rep(1,200))/200)
+filtCd4 <- as.vector(filter(cd4Data$cd4,filter=rep(1,200))/200)
+plot(cd4Data$time,cd4Data$cd4,pch=19,cex=0.1)
+lines(filtTime,filtCd4,col="red",lwd=3)
+```
+
+create a smooth filter
+
+```{r}
+ws = 100; tukey = function(x) pmax(1 - x^2,0)^2
+filt = tukey(seq(-ws,ws)/(ws+1)); filt=filt/sum(filt)
+filtTime <- as.vector(filter(cd4Data$time,filter=filt))
+filtCd4 <- as.vector(filter(cd4Data$cd4,filter=filt))
+
+# uncomment to plot a new diagram instead of showing the lines on top of the previous
+# plot(cd4Data$time,cd4Data$cd4,pch=19,cex=0.1)
+lines(filtTime,filtCd4,col="blue",lwd=2)
+
+# this is the filter we used here
+plot(seq(-(ws),(ws)),filt,pch=20,cex=0.5)
+
+```
+
+using polynomial regression function (loess)
+
+```{r}
+plot(cd4Data$time,cd4Data$cd4,pch=19,cex=0.1,ylim=c(500,1500)) 
+lines(cd4Data$time,loess(cd4 ~ time,data=cd4Data,span=0.1)$fitted,col="blue",lwd=3) 
+lines(cd4Data$time,loess(cd4 ~ time,data=cd4Data,span=0.25)$fitted,col="red",lwd=3)
+lines(cd4Data$time,loess(cd4 ~ time,data=cd4Data,span=0.76)$fitted,col="green",lwd=3)
+```
+
+now splines
+
+load the library first, then create the splines selecting the degrees of freedom (in this case, 3 spline functions are created)
+
+
+```{r}
+library(splines)
+ns1 <- ns(cd4Data$time,df=3)
+par(mfrow=c(1,3))
+
+# show how they look like
+plot(cd4Data$time,ns1[,1]); plot(cd4Data$time,ns1[,2]); plot(cd4Data$time,ns1[,3])
+```
+
+now fit a linear model using the splines as covariate
+
+```{r}
+lm1 <- lm(cd4Data$cd4 ~ ns1)
+par(mfrow=c(1,1))
+plot(cd4Data$time,cd4Data$cd4,pch=19,cex=0.1)
+points(cd4Data$time,lm1$fitted,col="blue",pch=19,cex=0.5)
+```
+
+now some bootstrap tests
+
+```{r}
+library(boot)
+set.seed(333)
+
+# define the population
+sampledMean <- rep(NA,1000)
+for(i in 1:1000){sampledMean[i] <- mean(rnorm(30))} 
+
+# define the statitstics
+meanFunc <- function(x,i){mean(x[i])}
+
+# define the bootstrapped population
+x <- rnorm(30)
+bootMean <- boot(x,meanFunc,1000)
+
+# compare population with bootstrapped population
+plot(density(bootMean$t))
+lines(density(sampledMean),col="red")
+```

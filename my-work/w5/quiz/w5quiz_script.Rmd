@@ -1,0 +1,69 @@
+w5 quiz
+========================================================
+
+## q1
+
+Fit an ANOVA model where the outcome is the number of breaks. Fit an ANOVA model including the wool and tension variables as covariates. 
+
+What are the dgrees of freedom for the tension variable and what is the F-statistic for tension after accounting for the variation due to wool?
+
+```{r}
+data(warpbreaks)
+summary(warpbreaks)
+wbAov <- aov(warpbreaks$breaks ~ warpbreaks$wool + warpbreaks$tension)
+summary(wbAov)
+```
+
+A: The degrees of freedom for tension is 2 and the F-statistic is 7.537.
+
+## q2
+
+Suppose that the probability an event is true is 0.2. What are the log odds of that event?
+
+```{r}
+log(0.2/0.8)
+```
+
+A: -1.386294
+
+## q3
+
+```{r}
+library(glm2)
+data(crabs)
+head(crabs)
+```
+
+Fit a Poisson regression model with the number of Satellites as the outcome and the width of the female as the covariate. What is the multiplicative change in the expected number of crabs for each additional centimeter of width?
+
+```{r}
+crabsGLm <- glm(crabs$Satellites ~ crabs$Width, family="poisson")
+summary(crabsGLm)
+crabsGLm$coeff
+exp(crabsGLm$coeff)
+```
+
+A: 1.1782
+
+## q4
+
+What is the expected number of Satellites for a female of width 22cm?
+
+```{r}
+exp(crabsGLm$coeff[1]) * exp(22 * crabsGLm$coeff[2])
+```
+
+A: 1.355587
+
+## q5
+
+Use the step() function in R to perform model selection using default parameters. What variables remain in the model after model selection?
+
+```{r}
+library(MASS)
+data(quine)
+lm1 = lm(log(Days + 2.5) ~.,data=quine)
+step(lm1)
+```
+
+A: 

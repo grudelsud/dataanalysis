@@ -1,0 +1,81 @@
+Data Analysis Project 1: Peer to peer Loans
+========================================================
+  
+
+## Processing
+Dowloading the data
+```{r loadData,cache=TRUE}
+setwd("/Users/torniai2/Dropbox/coursera/data_analysis/data_Analysis_March11th")
+#fileURL="https://spark-public.s3.amazonaws.com/dataanalysis/samsungData.rda"
+#download.file(fileURL, destfile='./data/samsungData.rda', method="curl")
+#dateDownloaded <- date()
+#dateDownloaded
+load("./data/samsungData.rda")
+```
+
+Let's have a look at the data. 
+```{r}
+summary(samsungData)
+names(samsungData)
+#head(samsungData)
+sum(is.na(samsungData))
+# Here I can say that the last two columns are describing the 
+
+```
+Too many variables, at least no NAs
+Let's try to understnad the outcome:
+```{r}
+summary(as.factor(samsungData$activity))
+```
+
+I have 6 possible recognized actions.
+Now let's build our datasets
+Anyway how to identify the variables to use in my model?
+
+```{r}
+trainingset <- subset(samsungData, samsungData$subject==c(1,3,5,6))
+testset <- subset(samsungData, samsungData$subject==c(27,28,29,30))
+```
+
+Need to get rid of the subject column and set as factors the outcomes.
+```{r}
+# drop the subject column in both train and test set
+trainingset$subject <- NULL
+testset$subject <- NULL
+# HAve the activity as factor
+testset$activity <- as.factor(testset$activity)
+trainingset$activity <- as.factor(trainingset$activity)
+summary(testset$activity)
+# Here make sure that the names of the variables are checked (otheriwse I have an error)
+testset <- data.frame(testset, check.names=TRUE)
+trainingset <- data.frame(trainingset, check.names=TRUE)
+```
+We see that the test set has more or less a uniform distribution across user's activities
+It would be interesting to see across the 4 users how is this distribution 
+
+## Prediction 
+
+Now Let's set the seed and build a random forest
+```{r}
+library(randomForest)
+library(ElemStatLearn)
+library(e1071)
+#Set the seed
+set.seed(271188)
+# Now random Forest
+forestmodel <- randomForest(activity ~., data=testset, prox=TRUE)
+forestmodel
+```
+
+Now let's see how this simple model works on predicition
+```{r}
+pred <- predict(forestmodel, testset)
+# Let's evaluate the error
+error = sum(pred!=testset$activity)/length(testset$activity)
+# Impossibile mi viene errore zero... ma qualcosa non va oviamente.
+# Per adesso te lo lascio qua.
+
+# Andra' fatto un set do forest tree
+```
+
+summary(testes$activity)

@@ -1,0 +1,8 @@
+library(datasets)
+data(iris)
+irisSubset = as.matrix(iris[,1:4])
+summary(irisSubset)
+distIrisSubset = dist(irisSubset)
+irisClust = hclust(distIrisSubset)
+plot(irisClust)
+rect.hclust(irisClust, h=3)

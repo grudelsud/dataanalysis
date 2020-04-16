@@ -1,0 +1,61 @@
+w5
+========================================================
+
+anova with multiple factors
+
+```{r}
+movies <- read.csv('../data/movies.txt', sep="\t")
+head(movies)
+```
+
+now do some shit, start with anova models
+
+```{r}
+aovObj <- aov(movies$score ~ movies$rating + movies$genre)
+summary(aovObj)
+
+aovObj2 <- aov(movies$score ~ movies$genre + movies$rating)
+summary(aovObj2)
+```
+
+order matters for unordered design! because we are evaluating percentage of variation taking into account something else
+
+## binary outcomes
+
+```{r}
+download.file("https://dl.dropbox.com/u/7710864/data/ravensData.rda", destfile="../data/ravensData.rda",method="curl")
+load("../data/ravensData.rda")
+head(ravensData)
+
+ravenLm <- lm(ravensData$ravenWinNum ~ ravensData$ravenScore)
+summary(ravenLm)
+```
+
+observing weird data here: intercept of 0.28 would mean that ravens have a probability of 28% winning the game if they score 0 points.
+
+let's plot the score / prob win of the fitted model
+
+```{r}
+plot(ravensData$ravenScore, ravenLm$fitted, cex=0.7, pch=20, col="#ff9900", ylab="prob ravens win")
+```
+
+there are probs > 1, since the variable score is treated as continous while it's discrete. so we can use a logistic regression defining the binomial distribution of the score
+
+```{r}
+ravenGLm <- glm(ravensData$ravenWinNum ~ ravensData$ravenScore, family="binomial")
+summary(ravenGLm)
+plot(ravensData$ravenScore, ravenGLm$fitted, cex=0.7, pch=20, col="#22cc00", ylab="prob ravens win")
+```
+
+now explore the results and try to explain them
+
+```{r}
+# these are log coeffs, score > 0 means it's more likely to win
+ravenGLm$coeff
+
+# eval exp if linear coeffs are needed, score > 1 means it's more likely to win
+exp(ravenGLm$coeff)
+exp(confint(ravenGLm))
+# anova with a little bit of magic, adding test="Chisq" returns the p value
+anova(ravenGLm, test="Chisq")
+```

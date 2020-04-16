@@ -1,0 +1,139 @@
+Data Analysis Project 1: Peer to peer Loans
+========================================================
+
+## Introduction
+
+
+For this analysis we will use a dataset conisting of a sample of 2,500 peer-to-peer loans issued through the [Lending Club (https://www.lendingclub.com/home.action). The interest rate of these loans is determined by the Lending Club on the basis of characteristics of the person asking for the loan such as their employment history, credit history, and creditworthiness scores. 
+
+The purpose of  this analysis is to identify and quantify associations between the interest rate of the loan and the other variables in the data set. In particular, you should consider whether any of these variables have an important association with interest rate after taking into account the applicant's FICO score. For example, if two people have the same FICO score, can the other variables explain a difference in interest rate between them?
+
+## Load libraries
+```{r}
+library(Hmisc)
+library(car)
+```
+
+## Processing
+Dowloading the data
+```{r}
+fileURL="https://spark-public.s3.amazonaws.com/dataanalysis/loansData.rda"
+download.file(fileURL, destfile='../../Data/loansData.rda', method="curl")
+dateDownloaded <- date()
+dateDownloaded
+load("../../Data/loansData.rda")
+```
+
+Let's take a  look at the data
+```{r}
+# Use a new dataframe to stroe the processind I do 
+
+# Let's just consider complete cases
+#loansData <- complete.cases(loansData)
+processedloansData <- loansData
+
+# Take a look at the data
+summary(loansData)
+head(loansData)
+
+# Check the class of the data
+sapply(loansData[1,],class)
+sum(is.na(loansData))
+```
+
+So I can see that there are some data that are factor that i want to consider as numeric instead
+Also there are just 7 Nas
+I will do some data transformation for the 
+```{r}
+# Remove the percentage symbol
+interest_rate_numeric <- as.numeric(gsub("%", "", as.character(processedloansData$Interest.Rate)))
+debt_to_income_numeric <- as.numeric(gsub("%", "", as.character(processedloansData$Debt.To.Income.Ratio)))
+
+# Removing Month as lenght
+loan_lenght_numeric  <- as.numeric(gsub(" months", "", as.character(processedloansData$Loan.Length)))
+
+```
+
+
+Now we do some exploratory analysis
+```{r}
+# Transforming the FICO range in jsut numeric factors
+transformed_fico <- sapply(loansData$FICO.Range, function(x) if(is.factor(x)) {
+  as.numeric(x)
+} else {
+  x
+})
+
+# Let's try to remove all the NA stuff
+# Just a smaple plot of rate Vs Amount requested
+plot(transformed_fico, interest_rate_numeric)
+
+# I also want to break some numeric variables in intervals
+amount_funded_cut <- cut2(loansData$Amount.Funded.By.Investors, g=5)
+debt_to_income_cut <- cut2(as.numeric(loansData$Debt.To.Income.Ratio), g=10)
+fico_range_cut <- cut2(as.numeric(loansData$FICO.Range), g=10)
+```
+
+It  interest rate decreases while the FICO rate increases
+```{r}
+# Just a sense of the distribution of the Interest rate here
+hist(interest_rate_numeric)
+# Trying to relate the interests rate with the FICO range, the amount obtained and the lenght of the 
+boxplot(interest_rate_numeric ~ processedloansData$FICO.Range, col="#cc8822", varwidth=TRUE)
+boxplot(interest_rate_numeric ~ amount_funded_cut, col="#cc8822", varwidth=TRUE)
+
+# Now trying to Plot the lenght of a loan wrt the interest rate
+#plot(interest_rate_numeric ~ amount_funded_cut)
+#plot(interest_rate_numeric ~ debt_to_income_cut)
+boxplot(interest_rate_numeric ~ debt_to_income_cut,  col="#cc8822", varwidth=TRUE)
+
+```
+From the plots above we can see that :
+* the interest rate decreases while the FICO rate increases as expected.
+* the interest rate increases when the amount granted increases
+* there is no particular correlation between the debt_to_income_ratio and the interest rate
+
+
+```{r}
+# Now trying to do something different trying to plot wiht the color of things donw wiht the 
+# Remove the percentage symbol
+
+processedloansData$Interest.Rate <- as.numeric(gsub("%", "", as.character(processedloansData$Interest.Rate)))
+processedloansData$Debt.To.Income.Ratio  <- as.numeric(gsub("%", "", as.character(processedloansData$Debt.To.Income.Ratio)))
+# Removing Month as lenght
+processedloansData$Loan.Length   <- as.numeric(gsub(" months", "", as.character(processedloansData$Loan.Length)))
+processedloansData$FICO.Range <- sapply(processedloansData$FICO.Range, function(x) if(is.factor(x)) {
+    as.numeric(x)
+} else {
+    x
+})
+#processedloansData$FICO.Range <- cut2(as.numeric(processedloansData$FICO.Range), g=5)
+
+
+# And now let's do this:
+with(processedloansData, plot(Interest.Rate, Amount.Funded.By.Investors, col=FICO.Range))
+```
+Inthe plot above we can also see that see that there are clusters based on the FICO range category 
+
+Let's try a matrix scattered plot and see if the correlations look similar. Of course they do.
+
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+
+ scatterplotMatrix(processedloansData[c(2,3,4,6,10)])
+```
+
+Now I want to try the same diagrams for different sets of FICO ranges (1 -5) and see how and if the correlations changes.
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+processedloansData$FICO.Range <- cut2(as.numeric(processedloansData$FICO.Range), g=5)
+processedloansData_fico_1 <- subset (processedloansData, processedloansData$FICO.Range==levels(processedloansData$FICO.Range)[1])
+processedloansData_fico_2 <- subset (processedloansData, processedloansData$FICO.Range==levels(processedloansData$FICO.Range)[2])
+processedloansData_fico_3 <- subset (processedloansData, processedloansData$FICO.Range==levels(processedloansData$FICO.Range)[3])
+processedloansData_fico_4 <- subset (processedloansData, processedloansData$FICO.Range==levels(processedloansData$FICO.Range)[4])
+processedloansData_fico_5 <- subset (processedloansData, processedloansData$FICO.Range==levels(processedloansData$FICO.Range)[5])
+scatterplotMatrix(processedloansData_fico_1[c(2,3,4,6)])
+scatterplotMatrix(processedloansData_fico_2[c(2,3,4,6)])
+scatterplotMatrix(processedloansData_fico_3[c(2,3,4,6)])
+scatterplotMatrix(processedloansData_fico_4[c(2,3,4,6)])
+scatterplotMatrix(processedloansData_fico_5[c(2,3,4,6)])
+
+```

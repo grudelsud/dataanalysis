@@ -1,0 +1,276 @@
+## Processing
+Dowloading the data
+
+```{r}
+setwd("/Users/torniai2/Dropbox/coursera/data_analysis/data_Analysis_March11th")
+#
+# fileURL='https://spark-public.s3.amazonaws.com/dataanalysis/samsungData.rda'
+# download.file(fileURL, destfile='./data/samsungData.rda', method='curl')
+# dateDownloaded <- date() dateDownloaded
+load("./data/samsungData.rda")
+```
+
+
+
+```{r}
+# transforming a bit the samsungData so as to cleanup names
+samsung_procdata <- data.frame(samsungData, check.names = TRUE)
+samsung_procdata$activity <- as.factor(samsung_procdata$activity)
+
+# preparing the training set
+training_subjects <- c(1, 3, 5, 6)
+training_set <- subset(samsung_procdata, samsung_procdata$subject == training_subjects)
+training_set <- training_set[order(training_set$activity), ]
+training_set$subject <- NULL
+
+factor_activity <- unique(training_set$activity)
+
+# pick a few subjects for validation set
+validation_subjects <- c(14, 15, 16, 17)
+validation_set <- subset(samsung_procdata, samsung_procdata$subject == validation_subjects)
+validation_set <- validation_set[order(validation_set$activity), ]
+validation_set$subject <- NULL
+
+# doing the same for test set
+test_subjects <- c(27, 28, 29, 30)
+test_set <- subset(samsung_procdata, samsung_procdata$subject == test_subjects)
+test_set <- test_set[order(test_set$activity), ]
+test_set$subject <- NULL
+```
+
+
+we subset the whole dataframe for training, validation and tests with the subjects we want to use, then ordering by activity, cleaning up variable names and removing the column related to subjects since we don't want it to appear in the model
+
+we set a seed so as to generate a consistent set of training models, so that errors on validation and test will be always consistent.
+
+
+```{r}
+library(randomForest)
+library(e1071)
+
+set.seed(987654321)
+mod_randomforest <- randomForest(activity ~ ., data = training_set, prox = TRUE)
+mod_svm <- svm(activity ~ ., data = training_set)
+
+print(mod_randomforest)
+
+## 
+## Call:
+##  randomForest(formula = activity ~ ., data = training_set, prox = TRUE) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 23
+## 
+##         OOB estimate of  error rate: 3.96%
+## Confusion matrix:
+##          laying sitting standing walk walkdown walkup class.error
+## laying       55       0        0    0        0      0     0.00000
+## sitting       0      46        4    0        0      0     0.08000
+## standing      0       3       54    0        0      0     0.05263
+## walk          0       0        0   62        1      1     0.03125
+## walkdown      0       0        0    1       47      1     0.04082
+## walkup        0       0        0    0        2     51     0.03774
+
+print(mod_svm)
+
+## 
+## Call:
+## svm(formula = activity ~ ., data = training_set)
+## 
+## 
+## Parameters:
+##    SVM-Type:  C-classification 
+##  SVM-Kernel:  radial 
+##        cost:  1 
+##       gamma:  0.001783 
+## 
+## Number of Support Vectors:  278
+```
+
+random forest showing error < 4% in activity classification, now we can do some prediction on the validation test to see how the models behave.
+
+
+```{r}
+predvalid_randomforest <- predict(mod_randomforest, validation_set)
+predvalid_svm <- predict(mod_svm, validation_set)
+
+errvalid_randomforest <- sum(predvalid_randomforest != validation_set$activity)/length(validation_set$activity)
+print(errvalid_randomforest)
+
+## [1] 0.1763
+
+errvalid_svm <- sum(predvalid_svm != validation_set$activity)/length(validation_set$activity)
+print(errvalid_svm)
+
+## [1] 0.2486
+```
+
+
+17% error using random forst and 25% using svm, we might need to tweak things a little bit to see whether we can reduce this error. maybe random forest, natively using bootstrap techniques on its training set, are overfitting.
+
+first we enlarge the training set using a greater number of subjects, then we use normal decision trees on the enlarged data and see if we can achieve a better prediction on the validation set. we will eventually compare all the results on the test set.
+
+
+```{r}
+# preparing the enlarged training set, keeping subjects 14,15,16,17 for
+# validation so that results are comparable. of course we are not touching
+# subjects 27,28,29,30 since they will be used for testing
+table(samsungData$subject)
+
+## 
+##   1   3   5   6   7   8  11  14  15  16  17  19  21  22  23  25  26  27 
+## 347 341 302 325 308 281 316 323 328 366 368 360 408 321 372 409 392 376 
+##  28  29  30 
+## 382 344 383
+
+# we are using the %in% to avoid the warning: longer object length is not
+# a multiple of shorter object length
+ltraining_subjects <- c(1, 3, 5, 6, 7, 8, 11, 19, 21, 22, 23, 25, 26)
+ltraining_set <- samsung_procdata[samsung_procdata$subject %in% ltraining_subjects, 
+    ]
+ltraining_set <- ltraining_set[order(ltraining_set$activity), ]
+ltraining_set$subject <- NULL
+
+library(tree)
+mod_tree <- tree(activity ~ ., data = ltraining_set)
+print(mod_tree)
+
+## node), split, n, deviance, yval, (yprob)
+##       * denotes terminal node
+## 
+##  1) root 4482 20000 laying ( 2e-01 2e-01 2e-01 2e-01 1e-01 1e-01 )  
+##    2) fBodyAccJerk.bandsEnergy...1.8 < -0.986067 2446  5000 laying ( 3e-01 3e-01 3e-01 0e+00 0e+00 0e+00 )  
+##      4) tGravityAcc.mean...X < 0.109006 849     0 laying ( 1e+00 0e+00 0e+00 0e+00 0e+00 0e+00 ) *
+##      5) tGravityAcc.mean...X > 0.109006 1597  2000 standing ( 0e+00 5e-01 5e-01 0e+00 0e+00 0e+00 )  
+##       10) tGravityAcc.max...Y < -0.0928764 742   100 standing ( 0e+00 1e-02 1e+00 0e+00 0e+00 0e+00 ) *
+##       11) tGravityAcc.max...Y > -0.0928764 855   600 sitting ( 0e+00 9e-01 1e-01 0e+00 0e+00 0e+00 )  
+##         22) tGravityAcc.mean...Y < 0.00668932 249   300 sitting ( 0e+00 6e-01 4e-01 0e+00 0e+00 0e+00 ) *
+##         23) tGravityAcc.mean...Y > 0.00668932 606     0 sitting ( 0e+00 1e+00 0e+00 0e+00 0e+00 0e+00 ) *
+##    3) fBodyAccJerk.bandsEnergy...1.8 > -0.986067 2036  4000 walk ( 5e-04 5e-04 0e+00 4e-01 3e-01 3e-01 )  
+##      6) tBodyAccMag.std.. < -0.0303083 1499  3000 walk ( 0e+00 7e-04 0e+00 5e-01 8e-02 4e-01 )  
+##       12) tGravityAcc.arCoeff...Z.1 < -0.44656 719   900 walkup ( 0e+00 1e-03 0e+00 1e-01 7e-02 8e-01 )  
+##         24) tGravityAcc.min...Y < -0.143246 656   600 walkup ( 0e+00 0e+00 0e+00 1e-01 3e-02 9e-01 )  
+##           48) tGravityAcc.arCoeff...X.1 < -0.496244 591   300 walkup ( 0e+00 0e+00 0e+00 3e-02 3e-02 9e-01 ) *
+##           49) tGravityAcc.arCoeff...X.1 > -0.496244 65    80 walk ( 0e+00 0e+00 0e+00 7e-01 0e+00 3e-01 ) *
+##         25) tGravityAcc.min...Y > -0.143246 63   100 walk ( 0e+00 2e-02 0e+00 5e-01 5e-01 0e+00 ) *
+##       13) tGravityAcc.arCoeff...Z.1 > -0.44656 780   800 walk ( 0e+00 0e+00 0e+00 8e-01 8e-02 7e-02 )  
+##         26) fBodyGyro.maxInds.X < -0.966667 71   100 walkdown ( 0e+00 0e+00 0e+00 1e-01 5e-01 4e-01 ) *
+##         27) fBodyGyro.maxInds.X > -0.966667 709   500 walk ( 0e+00 0e+00 0e+00 9e-01 5e-02 4e-02 ) *
+##      7) tBodyAccMag.std.. > -0.0303083 537   400 walkdown ( 2e-03 0e+00 0e+00 4e-02 9e-01 5e-02 ) *
+```
+
+printing the tree shows how the first split are done using a mixture of frequency, time and angle variables. this supports the idea that all variables contribute to the decision, no matter their specific domain. now check with prediction
+
+
+```{r}
+predvalid_tree <- predict(mod_tree, validation_set, type = "class")
+errvalid_tree <- sum(predvalid_tree != validation_set$activity)/length(validation_set$activity)
+print(errvalid_tree)
+
+## [1] 0.1994
+```
+
+
+Now le'ts validate instead refittign the models to the extended training set
+
+```{r}
+predvalid_tree <- predict(mod_tree, validation_set, type = "class")
+errvalid_tree <- sum(predvalid_tree != validation_set$activity)/length(validation_set$activity)
+print(errvalid_tree)
+
+## [1] 0.2023
+```
+
+using tree on larger dataset gives an error of 13%, lower than any other method used so far. now it's time to validate data on our precious test set.
+
+```{r}
+set.seed(271188)
+pred_randomforest <- predict(mod_randomforest, test_set)
+pred_svm <- predict(mod_svm, test_set)
+pred_tree <- predict(mod_tree, test_set, type = "class")
+
+err_randomforest <- sum(pred_randomforest != test_set$activity)/length(test_set$activity)
+print(err_randomforest)
+
+## [1] 0.08625
+
+err_svm <- sum(pred_svm != test_set$activity)/length(test_set$activity)
+print(err_svm)
+
+## [1] 0.1644
+
+err_tree <- sum(pred_tree != test_set$activity)/length(test_set$activity)
+print(err_tree)
+
+## [1] 0.1402
+```
+
+validating results on test set show that random forest (using bootstrap) and tree (using a larger data set) produce comparable results, with error around 10% (precisely 8% for random forest and 11% for tree), while svm in this case confirms to be the worst model with an error rate of 16%.
+
+If we try to refit the models with the extended training:
+
+```{r}
+set.seed(300671)
+# Redefining the prdictors using the larg training set
+ext_mod_randomforest <- randomForest(activity ~ ., data = ltraining_set, prox = TRUE)
+ext_mod_svm <- svm(activity ~ ., data = ltraining_set)
+
+pred_randomforest <- predict(ext_mod_randomforest, test_set)
+pred_svm <- predict(ext_mod_svm, test_set)
+pred_tree <- predict(mod_tree, test_set, type = "class")
+
+err_randomforest <- sum(pred_randomforest != test_set$activity)/length(test_set$activity)
+print(err_randomforest)
+
+## [1] 0.06739
+
+err_svm <- sum(pred_svm != test_set$activity)/length(test_set$activity)
+print(err_svm)
+
+## [1] 0.04582
+
+err_tree <- sum(pred_tree != test_set$activity)/length(test_set$activity)
+print(err_tree)
+
+## [1] 0.1321
+```
+
+Using the extended datasets we have the following results: random forest 7% , svm 4% , 13% for the tree. 
+Id doesnt' make any sense (unless that for the svm the more data you have the more it works...)
+SO I would say screw it and let's stick with what you have.
+
+
+export
+========================================================
+
+performing a k-fold cross validation on the tree [fig. 1b] we see a significant reduction of misclassifications for a depth larger than 6, this can help creating a simplified version of the tree in order to achieve comparable error with less variables.
+
+```{r}
+plot(cv.tree(mod_tree, FUN = prune.tree, method = "misclass"))
+```
+
+![plot of chunk unnamed-chunk-9](figure/unnamed-chunk-9.png) 
+
+```{r}
+mod_prunetree <- prune.tree(mod_tree, best = 6)
+```
+
+we can then validate our pruned tree against the test set
+
+```{r}
+pred_prunetree <- predict(mod_prunetree, test_set, type = "class")
+err_prunetree <- sum(pred_prunetree != test_set$activity)/length(test_set$activity)
+print(err_prunetree)
+
+## [1] 0.1482
+```
+
+an error in classification of 13% is slightly higher, but the reduction of the number of variables is much greater, allowing to select the significant variables for a correct classifcation
+
+```{r}
+plot(mod_prunetree)
+text(mod_prunetree)
+```
+
+![plot of chunk unnamed-chunk-11](figure/unnamed-chunk-11.png) 
+

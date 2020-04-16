@@ -1,0 +1,70 @@
+w6 shit
+========================================================
+
+go
+
+```{r}
+download.file("https://dl.dropbox.com/u/7710864/data/ravensData.rda", destfile="../data/ravensData.rda",method="curl")
+load("../data/ravensData.rda")
+summary(ravensData)
+
+xx <- seq(0,1,length=10)
+err <- rep(NA, 10)
+
+glm1 <- glm(ravenWinNum ~ ravenScore, family="binomial", data=ravensData)
+
+for(i in 1:length(xx)) {
+  err[i] = sum(ravensData$ravenWinNum != (predict(glm1, type="response") > xx[i]))
+}
+
+plot(xx, err, xlab="cutoff", ylab="err", pch=20, col="#3300CC")
+```
+
+now some decision trees
+
+```{r}
+data(iris)
+names(iris)
+table(iris$Species)
+
+library(tree)
+tree1 <- tree(Species ~ Sepal.Width + Petal.Width, data=iris)
+summary(tree1)
+
+plot(tree1)
+text(tree1)
+
+# and "cluster" plot
+plot(iris$Petal.Width, iris$Sepal.Width, pch=19, col=as.numeric(iris$Species))
+partition.tree(tree1, label="Species", add=TRUE)
+legend(1.75,4.5,legend=unique(iris$Species),col=unique(as.numeric(iris$Species)),pch=19)
+```
+
+do some prediction
+
+```{r}
+newPetals <- data.frame(Petal.Width = runif(20, 0, 2.5), Sepal.Width = runif(20, 2, 4.5))
+predNewPetals <- predict(tree1, newPetals, type="class")
+
+plot(newPetals$Petal.Width, newPetals$Sepal.Width, pch=19, col=as.numeric(predNewPetals))
+partition.tree(tree1, label="Species", add=TRUE)
+legend(0.75,4.5,legend=unique(predNewPetals),col=unique(as.numeric(predNewPetals)),pch=19)
+
+```
+
+now pruning
+
+```{r}
+data(Cars93, package="MASS")
+names(Cars93)
+
+treeCars <- tree(DriveTrain ~ MPG.city + Horsepower + Price + Cylinders + AirBags, data=Cars93)
+plot(treeCars)
+text(treeCars)
+plot(cv.tree(treeCars))
+plot(cv.tree(treeCars, FUN=prune.tree, method="misclass"))
+
+pruneTree <- prune.tree(treeCars, best=4)
+plot(pruneTree)
+text(pruneTree)
+```

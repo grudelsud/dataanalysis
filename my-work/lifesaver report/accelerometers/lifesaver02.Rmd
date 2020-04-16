@@ -1,0 +1,217 @@
+Lifesaver
+========================================================
+
+# Analysis recap
+
+* each push is always described by a positive peak of acceleration followed by a negative peak, viceversa for pull gestures
+* pull gestures are almost always detected as push (check vertical lines on the rightmost part of each graph, where negative peaks are stronger)
+* in theory there are several ways of discriminating push from pull gestures (e.g. principal components, support vector machines, regression models, etc.) but they're all quite expensive both in terms of computation and time of execution. moreover, it's hard to guarantee they would work without accessing to native resources (i.e. through Air)
+* it seems there's a problem syncing data coming from accelerometers (push not detected over obvious peaks, i.e. missing vertical lines in the plots below)
+* threshold for push action seems that can be defined for operating systems families (ios and android) without need of specifying device (i.e. values of 50~100 should probably fit most of the devices)
+* noise is higher on mobile devices rather than tablets (readable from histograms), reasons could be less weight and less accuracy in accelerometers
+
+## Conclusions
+
+Feels it's possible to implement accelerometers for CPR given that:
+
+1. we provide a fallback in case the values read from accelerometers are too weak or too noisy. fallback could be: restart of CPR action with sensible areas that will be pushed with thumbs
+
+2. we allow around 10-20% tolerance on the total number and time interval of pushes
+
+3. we keep a relaxed policy towards weird gestures, such as pulls instead of pushes
+
+## Data sources
+
+Setup data sources and download CSV files
+
+```{r}
+csvurl_iPhone4 <- "https://docs.google.com/spreadsheet/pub?key=0AtTfKjiuuoBPdDF4V2FSZ0FlbzVDSllYcTdKMXRobEE&single=true&gid=3&output=csv"
+csvurl_iPad2 <- "https://docs.google.com/spreadsheet/pub?key=0AtTfKjiuuoBPdDF4V2FSZ0FlbzVDSllYcTdKMXRobEE&single=true&gid=12&output=csv"
+csvurl_iPod3 <- "https://docs.google.com/spreadsheet/pub?key=0AtTfKjiuuoBPdDF4V2FSZ0FlbzVDSllYcTdKMXRobEE&single=true&gid=11&output=csv"
+csvurl_NexusS <- "https://docs.google.com/spreadsheet/pub?key=0AtTfKjiuuoBPdDF4V2FSZ0FlbzVDSllYcTdKMXRobEE&single=true&gid=6&output=csv"
+csvurl_Nexus10 <- "https://docs.google.com/spreadsheet/pub?key=0AtTfKjiuuoBPdDF4V2FSZ0FlbzVDSllYcTdKMXRobEE&single=true&gid=13&output=csv"
+csvurl_SamGalaxyS2 <- "https://docs.google.com/spreadsheet/pub?key=0AtTfKjiuuoBPdDF4V2FSZ0FlbzVDSllYcTdKMXRobEE&single=true&gid=10&output=csv"
+csvurl_SamGalaxyTab <- "https://docs.google.com/spreadsheet/pub?key=0AtTfKjiuuoBPdDF4V2FSZ0FlbzVDSllYcTdKMXRobEE&single=true&gid=7&output=csv"
+csvurl_AsusEEE <- "https://docs.google.com/spreadsheet/pub?key=0AtTfKjiuuoBPdDF4V2FSZ0FlbzVDSllYcTdKMXRobEE&single=true&gid=8&output=csv"
+
+# Uncomment below to download the files again
+# download.file(csvurl_iPhone4, destfile='../data/iPhone4.csv', method="curl")
+# download.file(csvurl_iPad2, destfile='../data/iPad2.csv', method="curl")
+# download.file(csvurl_iPod3, destfile='../data/iPod3.csv', method="curl")
+# download.file(csvurl_NexusS, destfile='../data/NexusS.csv', method="curl")
+# download.file(csvurl_Nexus10, destfile='../data/Nexus10.csv', method="curl")
+# download.file(csvurl_SamGalaxyS2, destfile='../data/SamGalaxyS2.csv', method="curl")
+# download.file(csvurl_SamGalaxyTab, destfile='../data/SamGalaxyTab.csv', method="curl")
+# download.file(csvurl_AsusEEE, destfile='../data/AsusEEE.csv', method="curl")
+
+iPhone4_data <- read.csv("../data/iPhone4.csv")
+iPad2_data <- read.csv("../data/iPad2.csv")
+iPod3_data <- read.csv("../data/iPod3.csv")
+NexusS_data <- read.csv("../data/NexusS.csv")
+Nexus10_data <- read.csv("../data/Nexus10.csv")
+SamGalaxyS2_data <- read.csv("../data/SamGalaxyS2.csv")
+SamGalaxyTab_data <- read.csv("../data/SamGalaxyTab.csv")
+AsusEEE_data <- read.csv("../data/AsusEEE.csv")
+
+```
+
+# Cross-device accelerometer noise
+
+```{r}
+pdf(file="acc_density.pdf",height=6,width=6)
+
+plot(density(iPhone4_data$z_acc),main="Acceleration density functions",col="orange",xlim=c(-100,100), lwd=3,xlab="Value on Z axis")
+
+lines(density(iPad2_data$z_acc),col="blue",lwd=3)
+lines(density(Nexus10_data$z_acc), col="red",lwd=3)
+lines(density(SamGalaxyS2_data$z_acc),col="green",lwd=3)
+
+legend(-100,0.08,title="Device",legend=c("iPhone 4", "iPad 2", "Nexus 10", "Samsung Galaxy S2"),col=c("orange","blue","red","green"),pch=20)
+dev.off()
+```
+
+# Apple
+
+## iPhone4
+
+Summary
+
+```{r}
+summary(iPhone4_data)
+```
+
+Histogram and data plots
+
+```{r fig.width=7, fig.height=6}
+hist(iPhone4_data$z_acc)
+plot(iPhone4_data$z_acc[40:440], type="l", pch=20, cex=0.4, col="#ff0099",xlab="frame count",ylab="acceleration",main="iPhone4")
+lines(iPhone4_data$y_acc[40:440], , pch=20, cex=0.4, col="#990033")
+points(which(iPhone4_data$push_detect ==1)-40,rep(0,length(which(iPhone4_data$push_detect ==1))),col="blue",cex=1.5,pch=20)
+```
+
+## iPad2
+
+Summary
+
+```{r}
+summary(iPad2_data)
+```
+
+Histogram and data plots
+
+```{r}
+pdf(file="cpr_ipad2.pdf",height=5,width=6)
+
+plot(iPad2_data$z_acc, type="o", pch=20, lwd=2, cex=0.5, col="blue",xlab="Frame count",ylab="Acceleration on Z axis",xlim=c(150,380), main="CPR on iPad2")
+lines(iPad2_data$z_dynpeak,col="orange",lwd=3)
+points(which(iPad2_data$push_detect ==1), rep(0,length(which(iPad2_data$push_detect ==1))),cex=2, pch=20,col="red")
+
+legend(250,250,title="Legend",legend=c("Acceleration", "Dynamic peak", "Gesture detection"),col=c("blue", "orange","red"),pch=20)
+dev.off()
+```
+
+## iPod3
+
+Summary
+
+```{r}
+summary(iPod3_data)
+```
+
+Histogram and data plots
+
+```{r fig.width=7, fig.height=6}
+hist(iPod3_data$z_acc)
+plot(iPod3_data$z_acc[100:450], type="o", pch=20, cex=0.4, col="#ff0099",xlab="frame count",ylab="z_acc",main="iPod3")
+lines(iPod3_data$z_dynpeak[100:450], col="blue")
+points(which(iPod3_data$push_detect ==1)-100,rep(0,length(which(iPod3_data$push_detect ==1))),cex=1.4,pch=20,col="blue")
+```
+
+# Vanilla Android
+
+## Nexus S
+
+Summary
+
+```{r}
+summary(NexusS_data)
+```
+
+Histogram and data plots
+
+```{r fig.width=7, fig.height=6}
+hist(NexusS_data$z_acc)
+plot(NexusS_data$z_acc, type="o", pch=20, cex=0.4, col="#9900ff",xlab="frame count",ylab="z_acc",main="Nexus S")
+points(which(NexusS_data$push_detect ==1),rep(0, length(which(NexusS_data$push_detect ==1))),cex=1.5, pch=20,col="red")
+lines(NexusS_data$z_dynpeak,col="blue")
+```
+
+## Nexus 10
+
+Summary
+
+```{r}
+summary(Nexus10_data)
+```
+
+Histogram and data plots
+
+```{r fig.width=7, fig.height=6}
+hist(Nexus10_data$z_acc)
+plot(Nexus10_data$z_acc[30:190], type="o", pch=20, cex=0.4, col="#9900ff",xlab="frame count",ylab="z_acc",main="Nexus 10")
+points(which(Nexus10_data$push_detect ==1)-30,rep(0,length(which(Nexus10_data$push_detect ==1))),col="red",pch=20,cex=1.5)
+lines(Nexus10_data$z_dynpeak,col="red")
+```
+
+# Propietary Android implementations
+
+## Samsung Galaxy S2
+
+Summary
+
+```{r}
+summary(SamGalaxyS2_data)
+```
+
+Histogram and data plots
+
+```{r fig.width=7, fig.height=6}
+hist(SamGalaxyS2_data$z_acc)
+plot(SamGalaxyS2_data$z_acc[20:170], type="o", pch=20, cex=0.4, col="#0099ff",xlab="frame count",ylab="z_acc",main="Samsung Galaxy S2")
+points(which(SamGalaxyS2_data$push_detect ==1),rep(0,length(which(SamGalaxyS2_data$push_detect ==1))),pch=20,cex=1.5,col="red")
+lines(SamGalaxyS2_data$z_dynpeak,col="red")
+```
+
+## Samsung Galaxy Tab 10
+
+Summary
+
+```{r}
+summary(SamGalaxyTab_data)
+```
+
+Histogram and data plots
+
+```{r fig.width=7, fig.height=6}
+hist(SamGalaxyTab_data$z_acc)
+plot(SamGalaxyTab_data$z_acc[20:90], type="o", pch=20, cex=0.4, col="#0099ff",xlab="frame count",ylab="z_acc",main="Samsung Galaxy Tab")
+points(which(SamGalaxyTab_data$push_detect ==1)-20, rep(0,length(which(SamGalaxyTab_data$push_detect ==1))),cex=1.5,pch=20,col="red")
+lines(SamGalaxyTab_data$z_dynpeak[20:90],col="red")
+```
+
+## Asus EEE
+
+Summary
+
+```{r}
+summary(AsusEEE_data)
+```
+
+Histogram and data plots
+
+```{r fig.width=7, fig.height=6}
+hist(AsusEEE_data$z_acc)
+plot(AsusEEE_data$z_acc[10:100], type="o", pch=20, cex=0.4, col="#999900",xlab="frame count",ylab="z_acc",main="Asus EEE")
+points(which(AsusEEE_data$push_detect ==1)-10,rep(0,length(which(AsusEEE_data$push_detect ==1))),col="blue",pch=20,cex=1.5)
+lines(AsusEEE_data$z_dynpeak,col="blue")
+```

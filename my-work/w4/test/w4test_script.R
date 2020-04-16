@@ -1,0 +1,7 @@
+library(UsingR)
+data(galton)
+summary(galton)
+plot(galton$parent, galton$child, pch=20, cex=0.7, col="#AA3300")
+lm1 <- lm(galton$child ~ galton$parent)
+summary(lm1)
+lines(galton$parent, lm1$fitted, col="#33AA00")

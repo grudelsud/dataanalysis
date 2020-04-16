@@ -1,0 +1,139 @@
+w7 quiz
+========================================================
+
+# q1
+
+When the span parameter increases in a loess fit which of the following is true (pick one)?
+
+A: The fit gets more smooth and the bias increases.
+
+# q2
+
+Define a data set according to the code
+
+```{r}
+set.seed(53535)
+xValues = seq(0,2*pi,length=100)
+yValues = rnorm(100) + sin(xValues)
+plot(xValues, yValues, type="l")
+```
+
+Fit linear models with the yValues as outcome and a natural cubic spline model for the xValues as the covariates. Fit the model with degrees of freedom equal to each integer between 1 and 10. 
+
+For each model, calculate the root mean squared error (RMSE) between the fitted values and the observed yValues (the rmse() function in R may help).
+
+```{r}
+library(splines)
+library(hydroGOF)
+
+rmse_fitted <- rep(NA,10)
+
+for(i in 1:10) {
+  ns_x <- ns(xValues,df=i)
+  lm_y <- lm(yValues ~ ns_x)
+  rmse_fitted[i] <- rmse(lm_y$fitted, yValues)
+}
+plot(rmse_fitted)
+```
+
+At what number of degrees of freedom is there the most dramatic drop in the RMSE? Why does this make sense?
+
+A: The RMSE drops between df=2 and df=3. This is because the sinusoidal model has one inflection points - like a cubic function.
+
+# q3
+
+Load the simpleboot package (you may have to install it first) with the following commands:
+
+```{r}
+library(simpleboot) 
+data(airquality)
+attach(airquality)
+```
+
+Calculate the 75th percentile of the Wind variable. Then set the seed to 883833 and use the one.boot function with 1,000 replications to calculate the bootstrap standard error of the 75th percentile of the Wind variable.
+
+```{r}
+summary(airquality)
+set.seed(883833)
+airboot <- one.boot(airquality$Wind, quantile, R = 1000, probs = 0.75)
+sd(airboot$t[,1])
+
+```
+
+A: The 75th percentile is: 11.5 The bootstrap s.d. is: 0.5965868
+
+# q4
+
+Load the Cars93 data:
+```{r}
+data(Cars93,package="MASS")
+names(Cars93)
+```
+
+Set the seed to 7363 and calculate three trees using the tree() function on bootstrapped samples (samples with replacement). Each tree should treat the DriveTrain variable as the outcome and Price and Type as covariates. 
+
+Predict the value of the following data frame
+```{r}
+library(tree)
+
+newdata = data.frame(Type = "Large",Price = 20)
+set.seed(7363)
+
+for(i in 1:3) {
+  ss <- sample(1:dim(Cars93)[1],replace=T)
+  carss <- Cars93[ss,]
+  tree <- tree(DriveTrain ~ Price + Type, data = carss)
+  predict <- predict(tree, newdata)
+  print(predict)
+}
+
+# theoretically, it should be possible with bagging and randomforest
+
+# library(ipred)
+# bag_tree <- bagging(DriveTrain ~ Price + Type, nbagg=3, data=Cars93)
+
+# library(randomForest)
+# forest <- randomForest(DriveTrain ~ Price + Type, data=Cars93, prox=TRUE, ntree=3)
+```
+
+with each tree and report the majority vote winner along with the percentage of votes among the three trees for that value.
+
+A: Front Percent of Votes = 100%
+
+# q5
+
+Load the vowel.train and vowel.test data sets:
+```{r}
+library(ElemStatLearn)
+data(vowel.train)
+data(vowel.test) 
+```
+
+Set the variable y to be a factor variable in both the training and test set. Then set the seed to 33833. 
+```{r}
+vowel.train$y <- as.factor(vowel.train$y)
+vowel.test$y <- as.factor(vowel.test$y)
+```
+
+Fit (1) a random forest predictor relating the factor variable y to the remaining variables and (2) an svm predictor using the svm() function in the e1071 package. What are the error rates for the two approaches on the test data set? What is the error rate when the two methods agree on a prediction?
+
+```{r}
+library(randomForest)
+library(e1071)
+
+set.seed(33833)
+vow_forest <- randomForest(y ~ ., data=vowel.train, prox=TRUE)
+vow_svm <- svm(y ~ ., data=vowel.train)
+
+pred_forest <- predict(vow_forest, vowel.test)
+pred_svm <- predict(vow_svm, vowel.test)
+
+err_forest <- sum(pred_forest != vowel.test$y) / length(vowel.test$y)
+err_svm <- sum(pred_svm != vowel.test$y) / length(vowel.test$y)
+
+agree <- which(pred_forest == pred_svm)
+err_agree <- 1 - sum(pred_forest[agree] == vowel.test$y[agree]) / length(agree)
+
+```
+
+A: Test error random forest = 0.4199134 Test error svm = 0.3874459 Test error both agree = 0.2823129

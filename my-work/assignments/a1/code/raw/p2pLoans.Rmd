@@ -1,0 +1,284 @@
+Assignment 1. Peer 2 peer Loans
+========================================================
+
+This is the raw code of the 1st assigment for the Data Analysis course.
+
+The data used for this assignment consist of a sample of 2,500 peer-to-peer loans issued through the [Lending Club](https://www.lendingclub.com/home.action). The interest rate of these loans is determined by the Lending Club on the basis of characteristics of the person asking for the loan such as their employment history, credit history, and creditworthiness scores. 
+
+The purpose of this analysis is to identify and quantify associations between the interest rate of the loan and the other variables in the data set. 
+
+For example, if two people have the same FICO score, can the other variables explain a difference in interest rate between them?
+
+## Preliminaries
+
+Load libraries and data, create variables.
+
+```{r}
+
+# Libraries
+library(Hmisc)
+
+# Data
+fileURL <- "https://spark-public.s3.amazonaws.com/dataanalysis/loansData.rda"
+download.file(fileURL, destfile='../../data/loansData.rda', method="curl")
+dateDownloaded <- date()
+dateDownloaded
+
+load('../../data/loansData.rda')
+
+# Data overview (pre-exploratory)
+summary(loansData$Loan.Length)
+head(loansData)
+sum(is.na(loansData))
+sapply(loansData[1,],class)
+```
+
+There are only 7 NA's in total, while checking details of NA's, turns out they're only 2 lines, so it's safe to ignore them since they don't represent a significant amount.
+
+So we see a lot of fields are factors, we need to convert them to numeric where possible
+
+```{r}
+# Define local cleaned variables
+procLoansData <- na.omit(loansData)
+
+# store Interest rate and debt to income ratio as numeric
+procLoansData$Interest.Rate.numeric <- as.numeric(gsub("%", "", procLoansData$Interest.Rate))
+procLoansData$Debt.To.Income.Ratio.numeric <- as.numeric(gsub("%", "", procLoansData$Debt.To.Income.Ratio))
+
+# store FICO range as numeric
+FICO.Range.split <- strsplit(as.character(procLoansData$FICO.Range), "-")
+pickFirst <- function(x) { as.numeric(x[1]) }
+procLoansData$FICO.Range.numeric <- sapply(FICO.Range.split, pickFirst)
+```
+
+## Exploratory
+
+```{r fig.width=7, fig.height=6}
+par(mfrow = c(1, 1))
+hist(procLoansData$Interest.Rate.numeric)
+```
+
+Interest Rate doesn't seem to have normal distribution, but it's not heavily skewed. We can keep the variable as is.
+
+```{r}
+hist(procLoansData$Amount.Requested)
+procLoansData$Amount.Requested.log10 <- log10(procLoansData$Amount.Requested)
+hist(procLoansData$Amount.Requested.log10)
+```
+
+Amount requested is quite skewed, we will use a log based function and check whether it's worth using it with regression models.
+
+
+```{r}
+table(procLoansData$Loan.Length)
+```
+
+Loans in 36 months are 4x the amount of 60 months loans.
+
+```{r}
+boxplot(procLoansData$Interest.Rate.numeric ~ cut2(procLoansData$Amount.Requested, g=6), col="#77cc00", varwidth=TRUE)
+```
+
+Interest increasing when amount requested grows.
+
+```{r}
+plot(procLoansData$Amount.Requested, procLoansData$Interest.Rate.numeric, col=procLoansData$Loan.Length, pch=20, cex=0.6)
+```
+
+Interest rate higher for longer & higher loans (fair enough)
+
+```{r}
+boxplot(procLoansData$Interest.Rate.numeric ~ procLoansData$FICO.Range, col="#cc7700", varwidth=TRUE)
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), pch=20, cex=0.6)
+```
+
+Interest lower for higher FICO (box & scatter)
+
+```{r}
+plot(jitter(procLoansData$Amount.Requested), jitter(procLoansData$Amount.Funded.By.Investors), col=cut2(procLoansData$FICO.Range.numeric, g=4), pch=20, cex=0.5)
+```
+
+Funded always lower than requested (easy), and equally distributed across fico ranges
+
+now try and see if we can visually find some clusters on the fico.range / interest.rate scatter plot
+
+```{r}
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), col=procLoansData$Loan.Length, pch=20, cex=0.6)
+```
+
+loan length gives 2 big clusters
+
+```{r}
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), col=cut2(procLoansData$Amount.Requested, g=2), pch=20, cex=0.6)
+```
+
+amount requested gives 2 clear clusters, tried sub-grouping more, with no luck
+
+```{r}
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), col=procLoansData$Home.Ownership, pch=20, cex=0.6)
+```
+
+group by home ownership doesn't give big clues
+
+```{r}
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), col=cut2(procLoansData$Debt.To.Income.Ratio.numeric, g=5), pch=20, cex=0.6)
+```
+
+same happens when grouped by debt to income ratio: no clues. tried also other factors (monthly income and employment length), none of them giving clear clusters on the FICO/Interest.Rate scatter plot.
+
+# Analysis
+
+## Linear model 1. interest rate is outcome and FICO is the only variable
+
+start fitting some models
+
+```{r}
+lm_interest_fico <- lm(procLoansData$Interest.Rate.numeric ~ procLoansData$FICO.Range.numeric)
+lm_interest_fico_factor <- lm(procLoansData$Interest.Rate.numeric ~ procLoansData$FICO.Range)
+
+# use this plot as reference so we can add fitted lines on top
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), col=cut2(procLoansData$Amount.Requested, g=2), pch=20, cex=0.6)
+abline(lm_interest_fico, col="black")
+```
+
+fitted line is clear, now plot the residuals
+
+```{r}
+par(mfrow = c(1, 3))
+plot(procLoansData$FICO.Range.numeric, lm_interest_fico$residuals,col=cut2(procLoansData$Interest.Rate.numeric, g=4),pch=20,cex=0.7)
+plot(procLoansData$FICO.Range.numeric, lm_interest_fico$residuals,col=cut2(procLoansData$Amount.Requested,g=2),pch=20,cex=0.7)
+plot(procLoansData$FICO.Range.numeric, lm_interest_fico$residuals,col=procLoansData$Loan.Length,pch=20,cex=0.7)
+```
+
+some nice non-random patterns here.
+
+```{r}
+summary(lm_interest_fico)
+anova(lm_interest_fico)
+confint(lm_interest_fico)
+summary(lm_interest_fico_factor)
+```
+
+nice and clean, P < 0.001. Honestly, I'm not sure how to interpret the confint, having a range between 70 and 75 seems a bit high for the interest rate? :(
+
+## Linear model 2. interest rate is outcome and FICO + Amount requested are covariates
+
+add Amount requested as covariates and see how they affect our model
+
+```{r}
+lm_interest_fico_amount_1 <- lm(procLoansData$Interest.Rate.numeric ~ procLoansData$FICO.Range.numeric + procLoansData$Amount.Requested)
+# see how it works with interaction between covariates
+lm_interest_fico_amount_2 <- lm(procLoansData$Interest.Rate.numeric ~ procLoansData$FICO.Range.numeric + procLoansData$Amount.Requested + procLoansData$FICO.Range.numeric*procLoansData$Amount.Requested)
+
+# plot fitted lines and show summaries
+par(mfrow = c(1, 1))
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), col=cut2(procLoansData$Amount.Requested, g=2), pch=20, cex=0.6)
+abline(lm_interest_fico_amount_1, col="#FF6633")
+abline(lm_interest_fico_amount_2, col="#66FF33")
+
+summary(lm_interest_fico_amount_1)
+summary(lm_interest_fico_amount_2)
+```
+
+adding the amount as covariate changes the fitted line, there is a significant statistical relationship between covariates
+
+adding interactions between covariates changes the slope of the fitted line. magnitude changes significantly, but not sure how to interpret this value.
+
+```{r}
+par(mfrow = c(1, 3))
+plot(procLoansData$FICO.Range.numeric,lm_interest_fico_amount_1$residuals,col=cut2(procLoansData$Interest.Rate.numeric,g=4),pch=20,cex=0.6)
+plot(procLoansData$FICO.Range.numeric,lm_interest_fico_amount_1$residuals,col=cut2(procLoansData$Amount.Requested,g=2),pch=20,cex=0.6)
+plot(procLoansData$FICO.Range.numeric,lm_interest_fico_amount_1$residuals,col=procLoansData$Loan.Length,pch=20,cex=0.6)
+```
+
+some non-randomness on these residuals as well.
+
+## Linear model 2. interest rate is outcome and FICO + Loan length are covariates
+
+now try the same analysis using loan length instead of amount requested. loan length is a factor and not numeric as it was the previous covariate
+
+```{r}
+lm_interest_fico_length_1 <- lm(procLoansData$Interest.Rate.numeric ~ procLoansData$FICO.Range.numeric + procLoansData$Loan.Length)
+# see how it works with interaction between covariates
+lm_interest_fico_length_2 <- lm(procLoansData$Interest.Rate.numeric ~ procLoansData$FICO.Range.numeric + procLoansData$Loan.Length + procLoansData$FICO.Range.numeric*procLoansData$Loan.Length)
+
+# use this plot as reference so we can add fitted lines on top
+par(mfrow = c(1, 1))
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), col=cut2(procLoansData$Amount.Requested, g=2), pch=20, cex=0.6)
+abline(lm_interest_fico, col="black")
+
+# plot fitted lines and show summaries
+abline(lm_interest_fico_length_1, col="#FF6633")
+abline(lm_interest_fico_length_2, col="#66FF33")
+
+summary(lm_interest_fico_length_1)
+summary(lm_interest_fico_length_2)
+
+```
+
+also in this case there is a significant relationship between covariates
+
+adding interaction between covariates has little effect on slope and intercept, we can ignore model2. 
+
+now plot the residuals
+
+```{r}
+par(mfrow = c(1, 3))
+plot(procLoansData$FICO.Range.numeric,lm_interest_fico_length_1$residuals,col=cut2(procLoansData$Interest.Rate.numeric,g=4),pch=20,cex=0.6)
+plot(procLoansData$FICO.Range.numeric,lm_interest_fico_length_1$residuals,col=cut2(procLoansData$Amount.Requested,g=2),pch=20,cex=0.6)
+plot(procLoansData$FICO.Range.numeric,lm_interest_fico_length_1$residuals,col=procLoansData$Loan.Length,pch=20,cex=0.6)
+```
+
+## Final model
+
+```{r}
+lm_final <- lm(procLoansData$Interest.Rate.numeric ~ procLoansData$FICO.Range.numeric + procLoansData$Amount.Requested + procLoansData$Loan.Length)
+
+par(mfrow = c(1, 2))
+plot(procLoansData$FICO.Range.numeric,lm_final$residuals,col=cut2(procLoansData$Amount.Requested,g=2),pch=20,cex=0.6)
+plot(procLoansData$FICO.Range.numeric,lm_final$residuals,col=procLoansData$Loan.Length,pch=20,cex=0.6)
+
+summary(lm_final)
+confint(lm_final)
+```
+
+create the final image
+```{r fig.width=7, fig.height=5}
+par(mfrow = c(1, 3))
+plot(jitter(procLoansData$FICO.Range.numeric), jitter(procLoansData$Interest.Rate.numeric), col=cut2(procLoansData$Amount.Requested, g=2), pch=20, cex=0.6,xlab="FICO score (numeric)", ylab="Interest Rate (%)", main="(a) Interest rate / FICO range")
+legend(730,23,title="Amount requested",legend=unique(cut2(procLoansData$Amount.Requested, g=2)),col=unique(cut2(procLoansData$Amount.Requested, g=2)),pch=20,cex=0.7)
+plot(procLoansData$FICO.Range.numeric, lm_interest_fico$residuals,col=procLoansData$Loan.Length,pch=20,cex=0.7,xlab="FICO score (numeric)",ylab="No Adjustement Residuals",main="(b) linear model, rate ~ FICO")
+legend(750,-6,title="Loan length",legend=unique(procLoansData$Loan.Length),col=unique(procLoansData$Loan.Length),pch=20,cex=0.7)
+plot(procLoansData$FICO.Range.numeric,lm_final$residuals,col=procLoansData$Loan.Length,pch=20,cex=0.7,xlab="FICO score (numeric)",ylab="Full Model Residuals",main="(c) multivariate regression")
+legend(750,-7,title="Loan length",legend=unique(procLoansData$Loan.Length),col=unique(procLoansData$Loan.Length),pch=20,cex=0.7)
+dev.copy2pdf(file="../../figures/final.pdf")
+```
+
+# Conclusions
+
+## check list
+
+Item 1 - Write-up
+* Does the analysis have an introduction, methods, analysis, and conclusions?
+* Are figures labeled and referred to by number in the text?
+* Is the analysis written in clear and understandable English?
+* Are the names of variables reported in plain language, rather than in coded names?
+* Does the analysis report the number of samples?
+* Does the analysis report any missing data or other unusual features?
+* Does the analysis include a discussion of potential confounders?
+* Are the statistical models appropriately applied?
+* Are estimates reported with appropriate units and measures of uncertainty?
+* Are estimators/predictions appropriately interpreted?
+* Does the analysis make concrete conclusions?
+* Does the analysis specify potential problems with the conclusions?
+
+Item 2 - Figure and caption
+* Is the figure caption descriptive enough to stand alone?
+* Does the figure focus on a key issue in the processing/modeling of the data?
+* Are axes labeled and are the labels large enough to read?
+
+Item 3 - References
+* Does the analysis include references for the statistical methods used?
+
+Item 4 - R script
+* Can the analysis be reproduced with the code provided?
